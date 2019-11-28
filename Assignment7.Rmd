@@ -1,6 +1,6 @@
 ---
 title: "Assignment 7 - Answers"
-author: "Charles Lang"
+author: "Bernell Downer"
 date: "11/30/2016"
 output: html_document
 ---
@@ -11,6 +11,7 @@ In the following assignment you will be looking at data from an one level of an 
 
 #Upload data
 ```{r}
+D1 <- read.csv("online.data.csv", header = TRUE)
 
 ```
 
@@ -18,24 +19,70 @@ In the following assignment you will be looking at data from an one level of an 
 ```{r}
 #Start by creating histograms of the distributions for all variables (#HINT: look up "facet" in the ggplot documentation)
 
-#Then visualize the relationships between variables
+#Convert "yes" & "no" to 1 & 0, respectively, for level.up entries
+D1$level.up <- ifelse(D1$level.up == "yes", 1,0)
 
-#Try to capture an intution about the data and the relationships
+hist(D1$post.test.score)
+hist(D1$pre.test.score)
+hist(D1$messages)
+hist(D1$forum.posts)
+hist(D1$av.assignment.score)
+hist(D1$level.up)
 
 ```
+
+```{r}
+#Visualize the relationships between variables
+pairs(D1)
+
+```
+
+```{r}
+#Try to capture an intution about the data and the relationships
+
+library(dplyr)
+library(tidyr)
+
+D2 <- gather(D1, "measure", "score", 2:7)
+
+library(ggplot2)
+p1 <- ggplot(D2, aes(score)) + facet_wrap(~measure, scales = "free")
+p1 + geom_histogram(stat = "count")
+
+```
+
 #Classification tree
 ```{r}
 #Create a classification tree that predicts whether a student "levels up" in the online course using three variables of your choice (As we did last time, set all controls to their minimums)
 
-#Plot and generate a CP table for your tree 
+library(rpart)
+c.tree1 <- rpart(level.up ~ pre.test.score + av.assignment.score + forum.posts, method = "class", data = D1)
 
+#Plot your tree
+plot(c.tree1)
+post(c.tree1, file = "tree1.ps", title = "ONLINE") #This creates a pdf image of the tree
+
+```
+
+```{r}
+#Generate a CP table for your tree 
+printcp(c.tree1)
+
+```
+
+```{r}
 #Generate a probability value that represents the probability that a student levels up based your classification tree 
 
-D1$pred <- predict(rp, type = "prob")[,2]#Last class we used type = "class" which predicted the classification for us, this time we are using type = "prob" to see the probability that our classififcation is based on.
+c.tree2 <- prune(c.tree1, cp = 0.01)#Set cp to the level at which you want the tree to end
+
+D1$pred <- predict(c.tree2, type = "prob")[,2]#Last class we used type = "class" which predicted the classification for us, this time we are using type = "prob" to see the probability that our classififcation is based on.
+
 ```
+
 ## Part II
 #Now you can generate the ROC curve for your model. You will need to install the package ROCR to do this.
 ```{r}
+#install.packages("ROCR")
 library(ROCR)
 
 #Plot the curve
@@ -44,37 +91,109 @@ plot(performance(pred.detail, "tpr", "fpr"))
 abline(0, 1, lty = 2)
 
 #Calculate the Area Under the Curve
-unlist(slot(performance(Pred2,"auc"), "y.values"))#Unlist liberates the AUC value from the "performance" object created by ROCR
+unlist(slot(performance(pred.detail,"auc"), "y.values"))#Unlist liberates the AUC value from the "performance" object created by ROCR
 
-#Now repeat this process, but using the variables you did not use for the previous model and compare the plots & results of your two models. Which one do you think was the better model? Why?
 ```
+```{r}
+#Now repeat this process, but using the variables you did not use for the previous model and compare the plots & results of your two models. Which one do you think was the better model? Why?
+
+D3 <- read.csv("online.data.csv", header = TRUE)
+
+#Convert "yes" & "no" to 1 & 0, respectively, for level.up entries
+D3$level.up <- ifelse(D3$level.up == "yes", 1,0)
+
+c.tree3 <- rpart(level.up ~ post.test.score + messages, method = "class", data = D3)
+
+post(c.tree3, file = "tree3.ps", title = "ONLINE") #This creates a pdf image of the tree
+
+printcp(c.tree3)
+
+```
+
+```{r}
+c.tree4 <- prune(c.tree3, cp = 0.01)#Set cp to the level at which you want the tree to end
+
+D3$pred <- predict(c.tree4, type = "prob")[,2]#Last class we used type = "class" which predicted the classification for us, this time we are using type = "prob" to see the probability that our classififcation is based on.
+
+#Plot the curve
+pred.detail_1 <- prediction(D3$pred, D3$level.up) 
+plot(performance(pred.detail_1, "tpr", "fpr"))
+abline(0, 1, lty = 2)
+
+#Calculate the Area Under the Curve
+unlist(slot(performance(pred.detail_1,"auc"), "y.values"))#Unlist liberates the AUC value from the "performance" object created by ROCR
+
+# CONCLUSION: The first model — rpart(level.up ~ pre.test.score + av.assignment.score + forum.posts) — is better because the 0.9766667 true positive rate is higher than the 0.8545833 true positive rate of the second model — rpart(level.up ~ post.test.score + messages). The curve of the first model is further from the diagonal line than is the curve of second model. The further the curve is from the diagonal line, the better the model is at discriminating between positives and negatives in general.
+
+```
+
 ## Part III
 #Thresholds
 ```{r}
 #Look at the ROC plot for your first model. Based on this plot choose a probability threshold that balances capturing the most correct predictions against false positives. Then generate a new variable in your data set that classifies each student according to your chosen threshold.
 
-threshold.pred1 <- 
+D1$threshold1 <- ifelse(D1$pred >= 0.9, 1,0)
 
 #Now generate three diagnostics:
 
-D1$accuracy.model1 <-
+# Accuracy
+D1$accuracy_1 <- mean(ifelse(D1$level.up == D1$threshold1, 1,0))
 
-D1$precision.model1 <- 
+# Precision
+D1$truepos_1 <- ifelse(D1$level.up == 1 & D1$threshold1 == "yes", 1, 0)
+D1$falsepos_1 <- ifelse(D1$level.up == 0 & D1$threshold1 == "yes", 1,0)
+D1$falseneg_1 <- ifelse(D1$level.up == 1 & D1$threshold1 == "no", 1,0)
 
-D1$recall.model1 <- 
+D1$precision_1 <- sum(D1$truepos_1)/(sum(D1$truepos_1) + sum(D1$falsepos_1))
+
+# Recall
+D1$recall_1 <- sum(D1$truepos_1)/(sum(D1$truepos_1) + sum(D1$falseneg_1))
 
 #Finally, calculate Kappa for your model according to:
 
 #First generate the table of comparisons
-table1 <- table(D1$level.up, D1$threshold.pred1)
+table_1 <- table(D1$level.up, D1$threshold1)
 
 #Convert to matrix
-matrix1 <- as.matrix(table1)
+matrix_1 <- as.matrix(table_1)
 
 #Calculate kappa
-kappa(matrix1, exact = TRUE)/kappa(matrix1)
+kappa(matrix_1, exact = TRUE)/kappa(matrix_1)
 
+```
+
+```{r}
 #Now choose a different threshold value and repeat these diagnostics. What conclusions can you draw about your two thresholds?
+
+D1$threshold2 <- ifelse(D1$pred >= 0, 1,0)
+
+#Now generate three diagnostics:
+
+# Accuracy
+D1$accuracy_2 <- mean(ifelse(D1$level.up == D1$threshold2, 1,0))
+
+# Precision
+D1$truepos_2 <- ifelse(D1$level.up == 1 & D1$threshold2 == "yes", 1, 0)
+D1$falsepos_2 <- ifelse(D1$level.up == 0 & D1$threshold2 == "yes", 1,0)
+D1$falseneg_2 <- ifelse(D1$level.up == 1 & D1$threshold2 == "no", 1,0)
+
+D1$precision_2 <- sum(D1$truepos_2)/(sum(D1$truepos_2) + sum(D1$falsepos_2))
+
+# Recall
+D1$recall_2 <- sum(D1$truepos_2)/(sum(D1$truepos_2) + sum(D1$falseneg_2))
+
+#Finally, calculate Kappa for your model according to:
+
+#First generate the table of comparisons
+table_2 <- table(D1$level.up, D1$threshold2)
+
+#Convert to matrix
+matrix_2 <- as.matrix(table_2)
+
+#Calculate kappa
+kappa(matrix_2, exact = TRUE)/kappa(matrix_2)
+
+# CONCLUSION: Model 1 (threshold = 0.9) and model 2 (threshold = 0) are not significantly different. The fact that model 1 kappa = 1 & model 2 kappa = 1.105136 suggests that the classifier — rpart(level.up ~ pre.test.score + av.assignment.score + forum.posts) — is erroneous and/or overfits the data.
 
 ```
 
